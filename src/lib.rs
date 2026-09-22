@@ -81,6 +81,7 @@ mod multipattern;
 mod pattern;
 mod rewrite;
 mod run;
+mod run_local;
 mod sexp;
 mod subst;
 mod unionfind;
@@ -134,6 +135,7 @@ pub use {
         Applier, Condition, ConditionEqual, ConditionalApplier, Rewrite, RewriteBorrow, Searcher,
     },
     run::*,
+    run_local::*,
     subst::{Subst, Var},
     util::*,
 };
