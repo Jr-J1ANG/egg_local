@@ -104,6 +104,26 @@ impl<'a, L: Language, N: Analysis<L>> RewriteBorrow<'a, L, N> {
     ) -> Vec<SearchMatches<'_, L>> {
         self.searcher.search_with_limit(egraph, limit)
     }
+    
+    /// Search only the specified e-classes.
+    ///
+    /// This is different from restricting which e-classes are accessible
+    /// during matching: matching may still follow child e-class IDs as
+    /// required by the searcher. The `local_scope` only controls the
+    /// e-classes at which matching is initially attempted.
+    pub fn search_local_with_limit(
+        &self,
+        egraph: &EGraph<L, N>,
+        local_scope: &[Id],
+        limit: usize,
+    ) -> Vec<SearchMatches<'_, L>> {
+        search_eclasses_with_limit(
+            &*self.searcher,
+            egraph,
+            local_scope.iter().copied(),
+            limit,
+        )
+    }
 
     /// Call [`apply_matches`] on the [`Applier`].
     ///
