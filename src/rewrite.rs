@@ -117,12 +117,27 @@ impl<'a, L: Language, N: Analysis<L>> RewriteBorrow<'a, L, N> {
         local_scope: &[Id],
         limit: usize,
     ) -> Vec<SearchMatches<'_, L>> {
-        search_eclasses_with_limit(
-            &*self.searcher,
-            egraph,
-            local_scope.iter().copied(),
-            limit,
-        )
+        let mut ms = vec![];
+        for eclass in local_scope.iter().copied() {
+            if limit == 0 {
+                break;
+            }
+            match self.searcher.search_eclass_with_limit_local(
+                egraph,
+                eclass,
+                limit,
+                local_scope,
+            ) {
+                None => continue,
+                Some(m) => {
+                    let len = m.substs.len();
+                    assert!(len <= limit);
+                    limit -= len;
+                    ms.push(m);
+                }
+            }
+        }
+        ms
     }
 
     /// Call [`apply_matches`] on the [`Applier`].
@@ -217,7 +232,22 @@ where
         eclass: Id,
         limit: usize,
     ) -> Option<SearchMatches<'_, L>>;
-
+    
+    /// Local-search variant used by `RunnerLocal`.
+    ///
+    /// The default preserves ordinary search behavior for custom searchers.
+    /// `Pattern` overrides this method to enforce the local-scope boundary
+    /// while recursively matching the pattern.
+    fn search_eclass_with_limit_local(
+        &self,
+        egraph: &EGraph<L, N>,
+        eclass: Id,
+        limit: usize,
+        _local_scope: &[Id],
+    ) -> Option<SearchMatches<'_, L>> {
+        self.search_eclass_with_limit(egraph, eclass, limit)
+    }
+    
     /// Search the whole [`EGraph`], returning a list of all the
     /// [`SearchMatches`] where something was found.
     /// This just calls [`Searcher::search_with_limit`] with a big limit.
