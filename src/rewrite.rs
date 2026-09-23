@@ -115,7 +115,7 @@ impl<'a, L: Language, N: Analysis<L>> RewriteBorrow<'a, L, N> {
         &self,
         egraph: &EGraph<L, N>,
         local_scope: &[Id],
-        limit: usize,
+        mut limit: usize,
     ) -> Vec<SearchMatches<'_, L>> {
         let mut ms = vec![];
         for eclass in local_scope.iter().copied() {
