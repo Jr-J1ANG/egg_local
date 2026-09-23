@@ -333,7 +333,30 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
             })
         }
     }
+    
+    fn search_eclass_with_limit_local(
+        &self,
+        egraph: &EGraph<L, A>,
+        eclass: Id,
+        limit: usize,
+        local_scope: &[Id],
+    ) -> Option<SearchMatches<'_, L>> {
+        let substs = self
+            .program
+            .run_with_limit_local(egraph, eclass, local_scope, limit);
+        if substs.is_empty() {
+            None
+        } else {
+            let ast = Some(Cow::Borrowed(&self.ast));
+            Some(SearchMatches {
+                eclass,
+                substs,
+                ast,
+            })
+        }
+    }
 
+    
     fn vars(&self) -> Vec<Var> {
         Pattern::vars(self)
     }
@@ -498,6 +521,37 @@ mod tests {
         assert_eq!(n_matches("(f ?x (g ?y))))"), 2);
         assert_eq!(n_matches("(f ?x (g ?x))))"), 1);
         assert_eq!(n_matches("(h ?x 0 0)"), 1);
+    }
+    
+    #[test]
+    fn local_matching_stops_at_scope_boundary() {
+        crate::init_logger();
+        let mut egraph = EGraph::default();
+        let expr: RecExpr<S> = "(f (g x))".parse().unwrap();
+        let root = egraph.add_expr(&expr);
+        egraph.rebuild();
+        let child = egraph
+            .lookup_expr(&"(g x)".parse().unwrap())
+            .unwrap();
+
+        // The root is in scope, but its child is outside the scope. The
+        // local matcher must not inspect the child's enodes.
+        let deep: Pattern<S> = "(f (g ?x))".parse().unwrap();
+        assert!(
+            deep.search_eclass_with_limit_local(&egraph, root, 10, &[root])
+                .is_none()
+        );
+
+        // Once the child is also in scope, recursive matching is allowed.
+        assert!(deep
+            .search_eclass_with_limit_local(&egraph, root, 10, &[root, child])
+            .is_some());
+
+        // An out-of-scope child is still usable as an atomic variable.
+        let leaf: Pattern<S> = "(f ?x)".parse().unwrap();
+        assert!(leaf
+            .search_eclass_with_limit_local(&egraph, root, 10, &[root])
+            .is_some());
     }
 
     #[test]
