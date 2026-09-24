@@ -4,7 +4,7 @@ A fork of [egg](https://github.com/egraphs-good/egg) for **local equality satura
 
 The main purpose of this fork is to support saturation restricted to a selected set of e-classes, rather than saturating the entire e-graph. 
 
-Clone this repository to a local path:
+You can lone this repository to a local path:
 
 ```bash
 git clone https://github.com/Jr-J1ANG/egg_local.git
