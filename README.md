@@ -2,7 +2,7 @@
 
 A fork of [egg](https://github.com/egraphs-good/egg) for **local equality saturation**.
 
-The main purpose of this fork is to support saturation restricted to a selected set of e-classes, rather than saturating the entire e-graph.
+The main purpose of this fork is to support saturation restricted to a selected set of e-classes, rather than saturating the entire e-graph. The code modifications made to `RunnerLocal` are independent and do not affect the behavior of the original `Runner`.
 
 ## Installation
 
