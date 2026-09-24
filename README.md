@@ -1,74 +1,61 @@
-# <img src="doc/egg.svg" alt="egg logo" height="40" align="left"> egg: egraphs good
+# egg_local
 
-[![Crates.io](https://img.shields.io/crates/v/egg.svg)](https://crates.io/crates/egg)
-[![Released Docs.rs](https://img.shields.io/crates/v/egg?color=blue&label=docs)](https://docs.rs/egg/)
-[![Main branch docs](https://img.shields.io/badge/docs-main-blue)](https://egraphs-good.github.io/egg/egg/)
-[![Zulip](https://img.shields.io/badge/zulip-join%20chat-blue)](https://egraphs.zulipchat.com)
+A fork of [egg](https://github.com/egraphs-good/egg) for **local equality saturation**.
 
-egg is a library for e-graphs and equality saturation.
-It can be used to build program optimizers, synthesizers, verifiers, and more.
-For more information, see these resources:
+The main purpose of this fork is to support saturation restricted to a selected set of e-classes, rather than saturating the entire e-graph.
 
-- [website](https://egraphs-good.github.io/)
-- [tutorial](https://docs.rs/egg/latest/egg/tutorials/)
-- [API docs](https://docs.rs/egg/)
-- [POPL 2021 paper](https://doi.org/10.1145/3434304)
+## Installation
 
-> Also check out the [egglog](https://github.com/egraphs-good/egglog) 
- system that provides an alternative approach to 
- equality saturation based on Datalog.
- It features a language-based design, incremental execution, and composable analyses.
- See also the [paper](//mwillsey.com/papers/egglog) and the [egglog web demo](https://egraphs-good.github.io/egglog).
+Clone this repository to a local path:
 
-Are you using egg?
-Please cite using this [BibTeX citation](./CITATION.bib) and
- add your project to the 
- ["Awesome E-graphs" page](https://github.com/philzook58/awesome-egraphs)!
+```bash
+git clone https://github.com/Jr-J1ANG/egg_local.git
+```
 
-<!-- Check out the [egg web demo](https://egraphs-good.github.io/egg-web-demo) for some quick e-graph action! -->
+Then use the local copy as a dependency in the project that needs it:
 
-## Using egg
-
-Add `egg` to your `Cargo.toml` like this:
 ```toml
 [dependencies]
-egg = "0.11.0"
+egg = { path = "path_to_egraph_local" }
 ```
 
-Make sure to compile with `--release` if you are measuring performance!
+## RunnerLocal
 
-## Developing
+This fork provides `RunnerLocal`, a runner designed similarly to egg's native `Runner`.
 
-It's written in [Rust](https://www.rust-lang.org/).
-Typically, you install Rust using [`rustup`](https://www.rust-lang.org/tools/install).
+Import it with:
 
-Run `cargo doc --open` to build and open the documentation in a browser.
-
-Before committing/pushing, make sure to run `make`, 
- which runs all the tests and lints that CI will (including those under feature flags).
-This requires the [`cbc`](https://projects.coin-or.org/Cbc) solver
- due to the `lp` feature.
-
-### Tests
-
-Running `cargo test` will run the tests.
-Some tests may time out; try `cargo test --release` if that happens.
-
-There are a couple interesting tests in the `tests` directory:
-
-- `prop.rs` implements propositional logic and proves some simple
-  theorems.
-- `math.rs` implements real arithmetic, with a little bit of symbolic differentiation.
-- `lambda.rs` implements a small lambda calculus, using `egg` as a partial evaluator.
-
-
-### Benchmarking
-
-To get a simple csv of the runtime of each test, you set the environment variable
-`EGG_BENCH_CSV` to something to append a row per test to a csv.
-
-Example:
-```bash
-EGG_BENCH_CSV=math.csv cargo test --test math --release -- --nocapture --test --test-threads=1
+```rust
+use egg::{Id, RunnerLocal};
 ```
+
+It can be used in a similar way to the original `Runner`:
+
+```rust
+let runner = RunnerLocal::default()
+    .with_egraph(egraph)
+    .with_iter_limit(ITER_LIMIT)
+    .with_node_limit(NODE_LIMIT)
+    .with_time_limit(Duration::from_secs(TIME_LIMIT_SECS))
+    .with_local_scope(local_scope)
+    .run(&rules());
+```
+
+The `local_scope` is a `Vec<Id>` containing the IDs of the e-classes that define the local scope for sarturation.
+
+For example:
+
+```rust
+let local_scope = vec![
+    Id::from(id),
+];
+```
+
+## Local Saturation Semantics
+
+During local saturation, rewrite-rule matching and application are restricted to the e-classes contained in `local_scope`.
+
+New e-classes created by rewrites during the saturation process are also added to `local_scope`, unless they are merged into an existing e-class outside the current local scope. (This restriction prevents the local scope from recursively expanding through existing e-graph structure outside the selected region.)
+
+Thus when matching a pattern, if an e-node has no child e-class that is inside the current local scope, that e-node is not recursively expanded for pattern matching. It therefore behaves as a local leaf from the perspective of the current saturation scope.
 
