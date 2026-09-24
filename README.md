@@ -19,7 +19,7 @@ egg = { path = "path_to_egraph_local" }
 
 ## RunnerLocal
 
-This fork provides `RunnerLocal`, which fully adopts the design of the native Egg `Runner`. The code modifications made to `RunnerLocal` are independent and do not affect the behavior of the original `Runner`.
+This fork provides `RunnerLocal`, which fully adopts the design of the native Egg `Runner`. The main code is defined in `run_local.rs`. Code modifications made to other files for `RunnerLocal` are independent so it will not affect the behavior of the original `Runner`.
 
 ## Installation
 
