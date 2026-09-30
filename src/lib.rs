@@ -88,7 +88,6 @@ mod util;
 
 mod extract_info;
 mod run_local;
-mod prune;
 
 /// A key to identify [`EClass`]es within an
 /// [`EGraph`].
@@ -143,7 +142,6 @@ pub use {
 
     extract_info::{ExtractorInfo, SelectedNode},
     run_local::*,
-    prune::*,
 };
 
 #[cfg(feature = "std")]
