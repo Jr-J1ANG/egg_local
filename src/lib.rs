@@ -141,9 +141,9 @@ pub use {
     subst::{Subst, Var},
     util::*,
 
-    extract_info::{ExtractorInfo, SelectedNode};
+    extract_info::{ExtractorInfo, SelectedNode},
     run_local::*,
-    prune::prune;
+    prune::prune,
 };
 
 #[cfg(feature = "std")]
