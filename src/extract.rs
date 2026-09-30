@@ -113,26 +113,7 @@ might overflow `usize` if you implement a cost function like [`AstSize`],
 even if the actual [`RecExpr`] fits compactly in memory.
 You might want to use [`saturating_add`](u64::saturating_add) to
 ensure your cost function is still monotonic in this situation.
-**/
-
-/// The selected original enode for one canonical eclass.
-#[derive(Clone, Debug)]
-pub struct SelectedNode<L: Language> {
-    /// Index of the selected enode in the original eclass node vector.
-    pub node_index: usize,
-    /// The selected enode, with children referring to original eclass IDs.
-    pub node: L,
-}
-
-/// Extraction choices expressed in terms of the source e-graph's eclass IDs.
-#[derive(Clone, Debug)]
-pub struct ExtractorInfo<L: Language> {
-    /// Canonical root eclass in the source e-graph.
-    pub root: Id,
-    /// Reachable canonical eclass ID -> selected original enode.
-    pub selected_nodes: HashMap<Id, SelectedNode<L>>,
-}
-        
+**/    
 pub trait CostFunction<L: Language> {
     /// The `Cost` type. It only requires `PartialOrd` so you can use
     /// floating point types, but failed comparisons (`NaN`s) will
