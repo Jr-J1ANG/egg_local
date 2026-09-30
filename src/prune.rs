@@ -1,165 +1,167 @@
 use crate::no_std_prelude::*;
-use crate::util::HashSet;
+use crate::util::{HashMap, HashSet};
 
 use crate::{Analysis, ExtractorInfo, Id, Language};
-use super::{EClass, EGraph};
+use super::EGraph;
 
-/// Reconstruct a pruned EGraph from an extraction result.
+/// Rebuild a compact EGraph from the selected DAG in `ExtractorInfo`.
 ///
-/// The returned EGraph:
-/// - keeps the original saturated EGraph's canonical eclass IDs;
-/// - keeps only the enode selected by the extractor for each canonical eclass;
-/// - discards all previous UnionFind equivalences and makes every surviving
-///   ID canonical (`find(id) == id`);
-/// - rebuilds `memo`, parent links, and `classes_by_op`;
-/// - preserves the old ID space so that future eclass IDs can continue from
-///   the old UnionFind size.
+/// This version deliberately does NOT preserve the old eclass ID space.
+/// The returned EGraph is completely rebuilt, so eclass IDs are compact and
+/// may be completely different from the saturated EGraph.
 ///
-/// `info.selected_nodes` must contain at most one selected enode for each
-/// canonical eclass.
-pub fn prune<L, N>(egraph: &EGraph<L, N>, info: &ExtractorInfo<L>) -> EGraph<L, N>
+/// The other purpose of this function is to maintain `unparticipated` across
+/// the rebuild:
+/// - `local_scope` is the set of eclasses that participated in this round;
+/// - any old eclass in `unparticipated` that became equivalent to the local
+///   scope is removed from `unparticipated`;
+/// - surviving old `unparticipated` eclasses are remapped to their new IDs;
+/// - eclasses created by this round's local saturation are never added to
+///   `unparticipated`, because creating/selecting them is already part of the
+///   current optimization.
+///
+/// Returns `(new_egraph, new_root, new_unparticipated)`.
+pub fn prune<L, N>(
+    saturated: &EGraph<L, N>,
+    info: &ExtractorInfo<L>,
+    local_scope: &[Id],
+    unparticipated: &[Id],
+) -> (EGraph<L, N>, Id, Vec<Id>)
 where
     L: Language + Clone,
     N: Analysis<L> + Clone,
     N::Data: Clone,
 {
     assert!(
-        egraph.clean,
-        "prune() requires a clean EGraph"
+        saturated.clean,
+        "prune() requires a clean saturated EGraph"
     );
 
-    let id_space_size = egraph.unionfind.size();
+    // Canonical eclasses corresponding to the local scope after all unions
+    // caused by this round's saturation have been processed.
+    let local_canonical: HashSet<Id> = local_scope
+        .iter()
+        .map(|&id| saturated.find(id))
+        .collect();
 
-    debug_assert_eq!(
-        id_space_size,
-        egraph.nodes.len(),
-        "EGraph invariant violated: union-find size != nodes.len()"
-    );
+    // old canonical eclass ID -> new compact eclass ID.
+    //
+    // Only selected eclasses are inserted here, so this map is also the
+    // provenance map needed to update `unparticipated`.
+    let mut old_to_new: HashMap<Id, Id> = HashMap::default();
 
-    // Canonicalize the selected nodes against the saturated EGraph first.
-    // The new EGraph has no unions, so all child IDs must already be canonical.
-    let mut selected: Vec<(Id, L)> = Vec::with_capacity(info.selected_nodes.len());
+    let mut pruned = EGraph::new(saturated.analysis.clone());
 
-    for (&old_id, selected_node) in &info.selected_nodes {
-        let canonical_id = egraph.find(old_id);
+    fn rebuild_selected<L, N>(
+        old_id: Id,
+        saturated: &EGraph<L, N>,
+        info: &ExtractorInfo<L>,
+        pruned: &mut EGraph<L, N>,
+        old_to_new: &mut HashMap<Id, Id>,
+    ) -> Id
+    where
+        L: Language + Clone,
+        N: Analysis<L> + Clone,
+        N::Data: Clone,
+    {
+        let canonical = saturated.find(old_id);
 
-        let mut node = selected_node.node.clone();
-        node.update_children(|child| egraph.find(child));
+        if let Some(&new_id) = old_to_new.get(&canonical) {
+            return new_id;
+        }
 
-        selected.push((canonical_id, node));
-    }
-
-    // The current ExtractorInfo invariant is one selected enode per
-    // canonical eclass.
-    let mut seen = HashSet::default();
-    for &(id, _) in &selected {
-        assert!(
-            seen.insert(id),
-            "multiple selected enodes for canonical eclass {}",
-            id
-        );
-    }
-
-    // Build a completely new EGraph. Its UnionFind will be initialized as
-    // an identity relation over the original ID space.
-    let mut pruned = EGraph::new(egraph.analysis.clone());
-
-    for _ in 0..id_space_size {
-        pruned.unionfind.make_set();
-    }
-
-    // Keep the old ID-indexed backing storage. Dead IDs are simply no longer
-    // represented in `classes`, `memo`, `parents`, or `pending`.
-    pruned.nodes = egraph.nodes.clone();
-
-    // Recreate only the selected eclasses/enodes.
-    for &(canonical_id, ref node) in &selected {
-        let old_class = egraph
-            .classes
-            .get(&canonical_id)
+        let selected = info
+            .selected_nodes
+            .get(&canonical)
             .unwrap_or_else(|| {
-                panic!(
-                    "selected canonical eclass {} does not exist in the saturated EGraph",
-                    canonical_id
-                )
+                panic!("selected DAG is missing eclass {}", canonical)
             });
 
-        let class = EClass {
-            id: canonical_id,
-            nodes: vec![node.clone()],
-            data: old_class.data.clone(),
-            parents: Vec::new(),
+        // Rebuild children first so the resulting EGraph remains a DAG and
+        // preserves sharing between selected eclasses.
+        let mut node = selected.node.clone();
+        node.update_children(|child| {
+            rebuild_selected(
+                child,
+                saturated,
+                info,
+                pruned,
+                old_to_new,
+            )
+        });
+
+        let new_id = pruned.add(node);
+
+        let previous = old_to_new.insert(canonical, new_id);
+        debug_assert!(
+            previous.is_none(),
+            "old eclass {} was inserted into the old_to_new map twice",
+            canonical
+        );
+
+        new_id
+    }
+
+    let old_root = saturated.find(info.root);
+    let new_root = rebuild_selected(
+        old_root,
+        saturated,
+        info,
+        &mut pruned,
+        &mut old_to_new,
+    );
+
+    // `add()` may have populated the normal egg work queues, so rebuild once
+    // after the whole selected DAG has been inserted.
+    pruned.rebuild();
+
+    // Normally this is an identity mapping because the selected DAG should not
+    // contain duplicate enodes. Use find() anyway so the bookkeeping remains
+    // correct even if a future language/analysis causes a union during rebuild.
+    let rebuilt_root = pruned.find(new_root);
+
+    // Maintain the history of eclasses that have NEVER participated in local
+    // saturation.
+    //
+    // Importantly, we only iterate over the old `unparticipated` set. New
+    // eclasses created by local saturation are therefore never introduced
+    // into this history vector.
+    let mut new_unparticipated = Vec::new();
+    let mut seen = HashSet::default();
+
+    for &old_id in unparticipated {
+        let canonical = saturated.find(old_id);
+
+        // This old eclass is now part of the current optimization region,
+        // possibly because it was directly in local_scope or because it was
+        // unioned with an eclass that was.
+        if local_canonical.contains(&canonical) {
+            continue;
+        }
+
+        // If the selected DAG did not keep this eclass, it no longer exists
+        // in the new compact EGraph, so it must disappear from the history.
+        let Some(&new_id) = old_to_new.get(&canonical) else {
+            continue;
         };
 
-        assert!(
-            pruned.classes.insert(canonical_id, class).is_none(),
-            "duplicate canonical eclass {} during pruning",
-            canonical_id
-        );
+        let new_id = pruned.find(new_id);
 
-        // In the current egg implementation, the ID of an eclass is also
-        // the index used by `nodes` for its current representative enode.
-        pruned.nodes[usize::from(canonical_id)] = node.clone();
-
-        assert!(
-            pruned.memo.insert(node.clone(), canonical_id).is_none(),
-            "duplicate selected enode {:?} in different pruned eclasses",
-            node
-        );
-    }
-
-    // Rebuild parent links from the selected DAG.
-    // EClass::parents stores parent enode IDs. In the pruned graph each
-    // surviving eclass has exactly one selected enode and its ID is the
-    // canonical eclass ID.
-    let mut parent_links: Vec<(Id, Id)> = Vec::new();
-
-    for (&parent_id, class) in &pruned.classes {
-        debug_assert_eq!(class.nodes.len(), 1);
-
-        let node = &class.nodes[0];
-        for &child_id in node.children() {
-            parent_links.push((child_id, parent_id));
+        // Two previously distinct unparticipated IDs may have become
+        // equivalent during this round. Keep the new ID only once.
+        if seen.insert(new_id) {
+            new_unparticipated.push(new_id);
         }
     }
 
-    for (child_id, parent_id) in parent_links {
-        let child_class = pruned
-            .classes
-            .get_mut(&child_id)
-            .unwrap_or_else(|| {
-                panic!(
-                    "selected enode in eclass {} refers to missing pruned child eclass {}",
-                    parent_id, child_id
-                )
-            });
+    // Deterministic order makes debugging and scope generation reproducible.
+    new_unparticipated.sort_unstable();
 
-        child_class.parents.push(parent_id);
-    }
-
-    // Rebuild the operator index.
-    for (&id, class) in &pruned.classes {
-        for node in &class.nodes {
-            pruned
-                .classes_by_op
-                .entry(node.discriminant())
-                .or_default()
-                .insert(id);
-        }
-    }
-
-    // The graph has been rebuilt directly, so there is no rebuild work left.
-    debug_assert!(pruned.pending.is_empty());
-    debug_assert!(pruned.analysis_pending.is_empty());
-    pruned.clean = true;
-
-    // The extracted root must remain represented by the pruned graph.
-    let root = egraph.find(info.root);
     assert!(
-        pruned.classes.contains_key(&root),
-        "extractor root {} was not preserved during pruning",
-        root
+        pruned.classes.contains_key(&rebuilt_root),
+        "rebuilt root {} does not exist in the pruned EGraph",
+        rebuilt_root
     );
 
-    pruned
+    (pruned, rebuilt_root, new_unparticipated)
 }
