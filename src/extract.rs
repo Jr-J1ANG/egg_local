@@ -4,6 +4,7 @@ use core::fmt::Debug;
 
 use crate::util::{HashMap, HashSet, hashmap_with_capacity};
 use crate::{Analysis, EClass, EGraph, Id, Language, RecExpr};
+use crate::{ExtractorInfo, SelectedNode};
 
 /** Extracting a single [`RecExpr`] from an [`EGraph`].
 
