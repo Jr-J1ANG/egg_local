@@ -51,7 +51,7 @@ where
 
     // The current ExtractorInfo invariant is one selected enode per
     // canonical eclass.
-    let mut seen = HashSet::with_capacity(selected.len());
+    let mut seen = HashSet::default();
     for &(id, _) in &selected {
         assert!(
             seen.insert(id),
