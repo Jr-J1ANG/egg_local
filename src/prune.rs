@@ -1,5 +1,5 @@
 use crate::no_std_prelude::*;
-use alloc::collections::HashSet;
+use crate::util::HashSet;
 
 use crate::{Analysis, ExtractorInfo, Id, Language};
 use super::{EClass, EGraph};
