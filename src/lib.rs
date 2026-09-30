@@ -143,7 +143,7 @@ pub use {
 
     extract_info::{ExtractorInfo, SelectedNode},
     run_local::*,
-    prune::prune,
+    prune::*,
 };
 
 #[cfg(feature = "std")]
