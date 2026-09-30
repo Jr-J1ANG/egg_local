@@ -114,6 +114,25 @@ even if the actual [`RecExpr`] fits compactly in memory.
 You might want to use [`saturating_add`](u64::saturating_add) to
 ensure your cost function is still monotonic in this situation.
 **/
+
+/// The selected original enode for one canonical eclass.
+#[derive(Clone, Debug)]
+pub struct SelectedNode<L: Language> {
+    /// Index of the selected enode in the original eclass node vector.
+    pub node_index: usize,
+    /// The selected enode, with children referring to original eclass IDs.
+    pub node: L,
+}
+
+/// Extraction choices expressed in terms of the source e-graph's eclass IDs.
+#[derive(Clone, Debug)]
+pub struct ExtractorInfo<L: Language> {
+    /// Canonical root eclass in the source e-graph.
+    pub root: Id,
+    /// Reachable canonical eclass ID -> selected original enode.
+    pub selected_nodes: HashMap<Id, SelectedNode<L>>,
+}
+        
 pub trait CostFunction<L: Language> {
     /// The `Cost` type. It only requires `PartialOrd` so you can use
     /// floating point types, but failed comparisons (`NaN`s) will
@@ -231,6 +250,52 @@ where
         (cost, expr)
     }
 
+    /// Find the cheapest expression and record the exact source eclasses/enodes
+    /// used by that expression.
+    pub fn find_best_with_info(
+        &self,
+        eclass: Id,
+    ) -> (CF::Cost, RecExpr<L>, ExtractorInfo<L>)
+    where
+        L: Clone,
+    {
+        let root = self.egraph.find(eclass);
+        let (cost, _) = self.costs[&root].clone();
+        let (_, expr) = self.find_best(root);
+
+        let mut info = ExtractorInfo {
+            root,
+            selected_nodes: HashMap::default(),
+        };
+        self.collect_selected_nodes(root, &mut info.selected_nodes);
+        (cost, expr, info)
+    }
+
+    fn collect_selected_nodes(
+        &self,
+        eclass: Id,
+        selected_nodes: &mut HashMap<Id, SelectedNode<L>>,
+    )
+    where
+        L: Clone,
+    {
+        let canonical = self.egraph.find(eclass);
+        if selected_nodes.contains_key(&canonical) {
+            return;
+        }
+
+        let node_index = self.costs[&canonical].1;
+        let node = self.egraph[canonical].nodes[node_index].clone();
+        selected_nodes.insert(canonical, SelectedNode {
+            node_index,
+            node: node.clone(),
+        });
+
+        for child in node.children() {
+            self.collect_selected_nodes(*child, selected_nodes);
+        }
+    }
+    
     /// Find the cheapest e-node in the given e-class.
     pub fn find_best_node(&self, eclass: Id) -> &L {
         let canonical = self.egraph.find(eclass);
