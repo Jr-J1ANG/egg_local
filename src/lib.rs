@@ -142,6 +142,7 @@ pub use {
 
     extract_info::{ExtractorInfo, SelectedNode},
     run_local::*,
+    egraph::prune,
 };
 
 #[cfg(feature = "std")]
