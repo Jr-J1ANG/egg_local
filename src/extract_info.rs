@@ -1,5 +1,5 @@
 use crate::{Id, Language};
-use std::collections::HashMap;
+use crate::util::HashMap;
 
 #[derive(Clone, Debug)]
 pub struct SelectedNode<L: Language> {
