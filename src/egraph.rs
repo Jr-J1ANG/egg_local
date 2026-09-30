@@ -11,6 +11,11 @@ use serde::{Deserialize, Serialize};
 
 use log::*;
 
+#[path = "prune.rs"]
+mod prune;
+
+pub use prune::prune;
+
 /** A data structure to keep track of equalities between expressions.
 
 Check out the [background tutorial](crate::tutorials::_01_background)
