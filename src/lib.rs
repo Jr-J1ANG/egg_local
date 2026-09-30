@@ -81,11 +81,14 @@ mod multipattern;
 mod pattern;
 mod rewrite;
 mod run;
-mod run_local;
 mod sexp;
 mod subst;
 mod unionfind;
 mod util;
+
+mod extract_info;
+mod run_local;
+mod prune;
 
 /// A key to identify [`EClass`]es within an
 /// [`EGraph`].
@@ -135,9 +138,12 @@ pub use {
         Applier, Condition, ConditionEqual, ConditionalApplier, Rewrite, RewriteBorrow, Searcher,
     },
     run::*,
-    run_local::*,
     subst::{Subst, Var},
     util::*,
+
+    extract_info::{ExtractorInfo, SelectedNode};
+    run_local::*,
+    prune::prune;
 };
 
 #[cfg(feature = "std")]
